@@ -15,13 +15,13 @@ struct DisplayDemo: View {
     enum Order: String, CaseIterable, Identifiable {
         case liquid, center, topLeft, top, random, none
         var id: String { rawValue }
-        func reveal(_ liquid: QRLiquidStyle) -> QRReveal {
+        func reveal(_ liquid: QRLiquidStyle, duration: Double) -> QRReveal {
             switch self {
-            case .liquid: return .liquid(liquid)
-            case .center: return QRReveal(order: .fromCenter)
-            case .topLeft: return QRReveal(order: .fromTopLeft)
-            case .top: return QRReveal(order: .fromTop)
-            case .random: return QRReveal(order: .random(seed: 1))
+            case .liquid: return .liquid(liquid, duration: duration)
+            case .center: return QRReveal(order: .fromCenter, duration: duration)
+            case .topLeft: return QRReveal(order: .fromTopLeft, duration: duration)
+            case .top: return QRReveal(order: .fromTop, duration: duration)
+            case .random: return QRReveal(order: .random(seed: 1), duration: duration)
             case .none: return .none
             }
         }
@@ -43,6 +43,8 @@ struct DisplayDemo: View {
     @State private var stagger = QRLiquidStyle.default.stagger
     @State private var dropsPerSide = Double(QRLiquidStyle.default.dropsPerSide)
     @State private var isPaid = false
+    /// Seconds for appearing, disappearing, payload swaps and the morph.
+    @State private var duration = 0.6
     @State private var driver = QRFrameDriver()
     @State private var exportImage: Image?
 
@@ -55,7 +57,7 @@ struct DisplayDemo: View {
     }
 
     private var reveal: QRReveal {
-        order.reveal(QRLiquidStyle(tension: tension, stagger: stagger, dropsPerSide: Int(dropsPerSide)))
+        order.reveal(QRLiquidStyle(tension: tension, stagger: stagger, dropsPerSide: Int(dropsPerSide)), duration: duration)
     }
 
     private var style: QRStyle {
@@ -78,7 +80,7 @@ struct DisplayDemo: View {
                     .qrStyle(style)
                     .qrFrameRate(frameRate)
                     .qrReveal(reveal)
-                    .qrMorph(isPaid ? .checkmark : nil)
+                    .qrMorph(isPaid ? .checkmark : nil, duration: duration)
                     .animation(reveal.animation, value: isShown)
                     .listRowBackground(background)
 
@@ -127,6 +129,7 @@ struct DisplayDemo: View {
                     Picker("Reveal", selection: $order) {
                         ForEach(Order.allCases) { Text($0.rawValue).tag($0) }
                     }
+                    slider("Duration (s)", value: $duration, range: 0.3...2)
                     if order == .liquid {
                         slider("Surface tension", value: $tension, range: 0...0.6)
                         slider("Stagger", value: $stagger, range: 0.1...0.9)
