@@ -12,7 +12,9 @@ import PrettyQRCore
 /// overlap while a reveal overshoots simply union.
 ///
 /// Only `reveal` is animatable. The matrix is not, so swapping frames of an
-/// animated code never interpolates, whatever animation is in flight.
+/// animated code never interpolates, whatever animation is in flight. While
+/// revealing, the shape draws the growing reveal (`QRReveal.grow`); the liquid
+/// reveal is drawn by `QRCodeView` with Metal and hands off to this shape at rest.
 public struct QRCodeShape: Shape {
     public var matrix: QRMatrix
     public var radii: QROutlineRadii
@@ -20,7 +22,7 @@ public struct QRCodeShape: Shape {
     public var reveal: Double
     public var revealStyle: QRReveal
 
-    public init(matrix: QRMatrix, radii: QROutlineRadii = .round, quietZone: Double = 2, reveal: Double = 1, revealStyle: QRReveal = .liquid) {
+    public init(matrix: QRMatrix, radii: QROutlineRadii = .round, quietZone: Double = 2, reveal: Double = 1, revealStyle: QRReveal = .grow) {
         self.matrix = matrix
         self.radii = radii
         self.quietZone = max(0, quietZone)

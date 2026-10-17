@@ -7,8 +7,9 @@ Static and animated QR codes for SwiftUI, in one dependency-free Swift package.
 - **Scan** both kinds with one object and one `reset()`, with exact progress for animated codes.
 - **Style** colours, rounded modules and finder eyes with adjustable radii, in the spirit of
   [beautiful-qr-code](https://github.com/mblode/beautiful-qr-code).
-- **Reveal** codes with a liquid transition: every module grows from its centre into place.
-  Frames of an animated code never animate.
+- **Transitions** like liquid mercury: codes gather out of drops, pull apart toward invisible
+  magnets, and flow into a shape such as a checkmark and back. At rest the code is always the
+  exact styled symbol. Frames of an animated code never animate.
 
 Requires iOS 17 or macOS 14 (display only on macOS), Swift 6. Scanning uses the camera on iOS.
 
@@ -68,14 +69,48 @@ radius is verified to decode with Vision in the test suite.
 
 ### Transitions
 
-`QRCodeView` reveals itself when inserted and dissolves when removed; changing the payload
-runs the same effect. Configure or disable it with `.qrReveal(_:)`:
+`QRCodeView` appears when inserted and disappears when removed; changing the payload runs both
+at once. The default reveal is liquid: the code behaves like mercury. To disappear it melts
+into drops that are pulled apart toward invisible magnets, merge with whatever arrived there
+and sink; neighbouring drops stay joined by threads that stretch, snap and recoil. Appearing
+is the same film backwards. The code can also flow into a shape and back:
+
+```swift
+QRCodeView(.text(invoice))
+    .qrMorph(isPaid ? .checkmark : nil)          // flows into a tick, and back when nil
+```
+
+Drops land along the target's stroke in proportion to their mass, so the shape is complete
+only when the last drop has arrived. An animated code holds its frame while morphed and plays
+on once it is back. Targets are strokes along a polyline (`QRMorphTarget(points:lineWidth:)`,
+two to eight points in unit coordinates of the symbol).
+
+The liquid has three parameters:
 
 ```swift
 QRCodeView(.auto(token))
-    .qrReveal(QRReveal(order: .fromCenter, stagger: 0.55, overshoot: 0.12, duration: 0.7))
-    .qrReveal(.none)   // plain cross-fade instead
+    .qrReveal(.liquid(QRLiquidStyle(
+        tension: 0.26,      // how far apart two bodies still join through a neck, in modules (0…0.6)
+        stagger: 0.55,      // how far the drops' timing is spread (0.1…0.9)
+        dropsPerSide: 7     // how many drops the code is cut into per side (4…12)
+    ), duration: 1.2))
+    .qrMorph(.checkmark, duration: 1.6)
 ```
+
+The liquid is drawn with a Metal shader that is compiled at runtime the first time a code
+loads (about 0.1 s, off the main thread), so consumers need no Metal toolchain. It runs only
+while a transition is in flight and starts and ends on the resting outline, so handing over to
+the vector `QRCodeShape` at rest is invisible. Where Metal is unavailable the growing reveal
+runs instead. Other reveals:
+
+```swift
+    .qrReveal(.grow)    // every module grows from its centre
+    .qrReveal(QRReveal(order: .fromCenter, stagger: 0.55, overshoot: 0.12, duration: 0.7))
+    .qrReveal(.none)    // plain cross-fade
+```
+
+The liquid was designed in a browser prototype, kept in `Prototypes/LiquidLab` together with
+the tools that check the Swift port against it frame by frame.
 
 For your own layouts, `QRCodeShape` is an animatable `Shape` (only `reveal` interpolates), so
 `withAnimation { reveal = 1 }` grows the modules into place; that is how `QRCodeView` swaps
@@ -178,12 +213,15 @@ output stays byte-compatible with other BCR-2020-005 readers and writers.
 
 ## Example app
 
-`Example/` contains an iOS app with live style controls, transition demos, camera scanning and
-a scripted scan for the simulator. The project is generated, not checked in:
+`Example/` contains an iOS app with live style controls, the liquid parameters, a morph toggle,
+camera scanning and a scripted scan for the simulator. The project is generated, not checked in:
 
 ```sh
 cd Example && xcodegen generate && open PrettySwiftQRExample.xcodeproj
 ```
+
+Launched with `-liquidDemo`, the display tab loops every liquid effect on its own (appear,
+morph and back, disappear, payload swaps, an animated code morphing), for screen recordings.
 
 The example's UI test (`PrettySwiftQRExampleUITests`) toggles the code and swaps payloads
 while taking screenshots every ~65 ms, so the reveal can be inspected frame by frame. Set

@@ -19,9 +19,12 @@ import PrettyQRCore
 /// change of payload (or insertion/removal of the view) runs the reveal effect.
 ///
 /// Payload swaps are choreographed by the view itself: the previous symbol
-/// dissolves while the new one grows, both driven through `QRCodeShape`'s
-/// animatable reveal. Appearing works the same way (the symbol starts hidden
-/// and grows once on screen); only removal relies on `.transition(.qrReveal)`.
+/// dissolves while the new one appears, both driven by an animatable reveal.
+/// Appearing works the same way (the symbol starts hidden and appears once on
+/// screen); only removal relies on `.transition(.qrReveal)`.
+///
+/// With the default liquid reveal the code can also flow into a shape and
+/// back with `.qrMorph(_:)`, for example a checkmark once a payment arrives.
 public struct QRCodeView<Placeholder: View>: View {
     private let payload: QRPayload
     private let placeholder: (Error?) -> Placeholder
@@ -30,11 +33,17 @@ public struct QRCodeView<Placeholder: View>: View {
     @Environment(\.qrStyle) private var style
     @Environment(\.qrFrameRate) private var frameRate
     @Environment(\.qrRevealStyle) private var revealStyle
+    @Environment(\.qrMorph) private var morphRequest
     @Environment(\.scenePhase) private var scenePhase
     @State private var internalDriver = QRFrameDriver()
     @State private var isActive = true
     /// The current symbol plus any previous ones still dissolving.
     @State private var symbols: [SymbolEntry] = []
+    /// 0 the code, 1 `morphTarget`. The target stays set until the code is back.
+    @State private var morph: Double = 0
+    @State private var morphTarget: QRMorphTarget?
+    @State private var morphGeneration = 0
+    @State private var lastTaskKey: TaskKey?
 
     private var driver: QRFrameDriver { externalDriver ?? internalDriver }
 
@@ -57,7 +66,8 @@ public struct QRCodeView<Placeholder: View>: View {
             ForEach(symbols) { entry in
                 if let matrix = matrix(for: entry) {
                     let outgoing = entry.generation != driver.swapGeneration
-                    RevealedSymbol(matrix: matrix, style: style, revealStyle: outgoing ? revealStyle.displacing : revealStyle, reveal: entry.reveal)
+                    RevealedSymbol(matrix: matrix, style: style, revealStyle: outgoing ? revealStyle.displacing : revealStyle, reveal: entry.reveal,
+                                   morph: morph, morphTarget: morphTarget)
                         .onAppear {
                             if entry.reveal < 1 { reveal(entry.generation) }
                         }
@@ -76,14 +86,32 @@ public struct QRCodeView<Placeholder: View>: View {
         .onChange(of: driver.swapGeneration, initial: true) { _, generation in
             symbolsDidSwap(to: generation)
         }
-        .task(id: TaskKey(payload: payload, errorCorrection: style.errorCorrection, frameRate: frameRate, active: isActive)) {
-            let swapped = await driver.load(payload, errorCorrection: style.errorCorrection)
-            guard isActive, !Task.isCancelled else { return }
-            if swapped, revealStyle.isEnabled {
-                // Let the first frame finish revealing before frames start cycling.
-                try? await Task.sleep(for: .seconds(revealStyle.duration))
+        .onChange(of: morphRequest.target, initial: true) { old, target in
+            morph(to: target, animated: old != target)
+        }
+        .task(id: taskKey) {
+            let key = taskKey
+            if revealStyle.liquid != nil {
+                // Compile the liquid shader before the first symbol appears.
+                await QRLiquidGPU.prepare()
                 guard !Task.isCancelled else { return }
             }
+            // Back from a morph: play on from the frame that was held.
+            let resuming = lastTaskKey.map { $0.morphed && !key.morphed && $0.loading == key.loading } ?? false
+            lastTaskKey = key
+            if key.morphed, driver.loadedPayload == payload, driver.matrix != nil {
+                return // morphed: hold the frame on screen
+            }
+            if !resuming {
+                let swapped = await driver.load(payload, errorCorrection: style.errorCorrection)
+                guard isActive, !Task.isCancelled else { return }
+                if swapped, revealStyle.isEnabled {
+                    // Let the first frame finish revealing before frames start cycling.
+                    try? await Task.sleep(for: .seconds(revealStyle.duration))
+                    guard !Task.isCancelled else { return }
+                }
+            }
+            guard !key.morphed else { return }
             await driver.play(framesPerSecond: frameRate)
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
@@ -98,11 +126,58 @@ public struct QRCodeView<Placeholder: View>: View {
         return driver.isAnimated ? "Animated QR code, part \(driver.sequenceNumber) of a \(driver.fragmentCount)-fragment message" : "QR code"
     }
 
-    private struct TaskKey: Equatable {
+    private var taskKey: TaskKey {
+        TaskKey(loading: LoadingKey(payload: payload, errorCorrection: style.errorCorrection, frameRate: frameRate, active: isActive),
+                morphed: morphTarget != nil)
+    }
+
+    private struct LoadingKey: Equatable {
         let payload: QRPayload
         let errorCorrection: QRErrorCorrection?
         let frameRate: Double
         let active: Bool
+    }
+
+    private struct TaskKey: Equatable {
+        let loading: LoadingKey
+        /// Frames hold while the code is morphed into a shape.
+        let morphed: Bool
+    }
+
+    // MARK: Morph
+
+    private func morph(to target: QRMorphTarget?, animated: Bool) {
+        morphGeneration += 1
+        let generation = morphGeneration
+        guard revealStyle.liquid != nil, revealStyle.isEnabled else {
+            morphTarget = nil
+            morph = 0
+            return
+        }
+        guard animated else {
+            // Already morphed when the view appears: start as the shape.
+            morphTarget = target
+            morph = target == nil ? 0 : 1
+            return
+        }
+        let animation = Animation.linear(duration: morphRequest.duration)
+        guard let target else {
+            withAnimation(animation) { morph = 0 } completion: {
+                if generation == morphGeneration { morphTarget = nil }
+            }
+            return
+        }
+        if let current = morphTarget, current != target, morph > 0 {
+            // Another shape: flow back into the code first, then into the new shape.
+            withAnimation(animation) { morph = 0 } completion: {
+                guard generation == morphGeneration else { return }
+                morphTarget = target
+                withAnimation(animation) { morph = 1 }
+            }
+            return
+        }
+        morphTarget = target
+        withAnimation(animation) { morph = 1 }
     }
 
     // MARK: Swap choreography
@@ -181,21 +256,28 @@ public extension QRCodeView where Placeholder == QRCodePlaceholder {
 
 /// One symbol. Combines the reveal driven by `QRCodeView`'s swap choreography
 /// with `qrReveal` from an enclosing `.transition(.qrReveal)`. Reads the
-/// environment *here*, beneath the transition, so the shape interpolates.
+/// environment *here*, beneath the transition, so the symbol interpolates.
 private struct RevealedSymbol: View {
     let matrix: QRMatrix
     let style: QRStyle
     let revealStyle: QRReveal
     let reveal: Double
+    let morph: Double
+    let morphTarget: QRMorphTarget?
 
     @Environment(\.qrReveal) private var transitionReveal
 
     var body: some View {
-        QRCodeShape(matrix: matrix, radii: style.radii, quietZone: style.quietZone,
-                    reveal: min(transitionReveal, revealStyle.isEnabled ? reveal : 1), revealStyle: revealStyle)
-            .fill(style.foreground)
-            // With reveals disabled the swap is a plain cross-fade.
-            .opacity(revealStyle.isEnabled ? 1 : reveal)
+        let shown = min(transitionReveal, revealStyle.isEnabled ? reveal : 1)
+        if revealStyle.isEnabled, let liquid = revealStyle.liquid, QRLiquidGPU.ready != nil {
+            QRLiquidSymbol(matrix: matrix, style: style, liquid: liquid, target: morphTarget,
+                           reveal: shown, morph: morphTarget == nil ? 0 : morph)
+        } else {
+            QRCodeShape(matrix: matrix, radii: style.radii, quietZone: style.quietZone, reveal: shown, revealStyle: revealStyle)
+                .fill(style.foreground)
+                // With reveals disabled the swap is a plain cross-fade.
+                .opacity(revealStyle.isEnabled ? 1 : reveal)
+        }
     }
 }
 

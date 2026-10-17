@@ -1,0 +1,1148 @@
+<title>Liquid QR Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a lab bench. The specimen (QR stage) on the left, instruments (controls) on the right, contact sheet below. */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --ink: #141820;
+  --muted: #5a6472;
+  --line: #d8dee6;
+  --accent: #0b7480;
+  --accent-soft: #d7eef0;
+  --paper: #ffffff;
+  --font-display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --font-body: "Instrument Sans", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1217; --surface: #161b22; --ink: #e6eaf0; --muted: #94a1b2; --line: #263040;
+    --accent: #45c3cc; --accent-soft: #123338; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1217; --surface: #161b22; --ink: #e6eaf0; --muted: #94a1b2; --line: #263040;
+  --accent: #45c3cc; --accent-soft: #123338; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+header h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(28px, 4vw, 40px); line-height: 1.05; margin: 0 0 6px; letter-spacing: -0.01em; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 68ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+@media (max-width: 860px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.specimen { position: relative; width: 100%; max-width: 560px; aspect-ratio: 1; background: var(--paper); border-radius: 18px; border: 1px solid var(--line); overflow: hidden; align-self: center; }
+.specimen canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#diff { mix-blend-mode: difference; pointer-events: none; }
+.readout { display: flex; flex-wrap: wrap; gap: 8px 16px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); justify-content: center; font-variant-numeric: tabular-nums; }
+.readout b { color: var(--ink); font-weight: 500; }
+.scrub { display: flex; align-items: center; gap: 10px; max-width: 560px; width: 100%; align-self: center; }
+.scrub input { flex: 1; accent-color: var(--accent); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.group { display: flex; flex-direction: column; gap: 8px; }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button, .actions button, .scrub button, .copy button {
+  font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  padding: 6px 11px; border-radius: 999px; cursor: pointer; transition: background .15s, border-color .15s;
+}
+.seg button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); font-weight: 600; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.actions button { border-radius: 10px; padding: 10px; font-weight: 600; background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.actions button.secondary { background: var(--surface); color: var(--ink); border-color: var(--line); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.param { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; font-size: 13px; }
+.param input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.param output { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+.hint code { font-family: var(--font-mono); font-size: 11px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.check input { accent-color: var(--accent); }
+.copy { display: flex; flex-direction: column; gap: 6px; }
+.copy output { font-family: var(--font-mono); font-size: 11px; color: var(--muted); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; user-select: all; word-break: break-word; }
+.copy button { align-self: flex-start; }
+.sheet { display: flex; flex-direction: column; gap: 10px; }
+.sheet h2 { font-family: var(--font-display); font-weight: 500; font-size: 22px; margin: 0; }
+.sheet p { margin: 0; color: var(--muted); font-size: 14px; }
+.sheet-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 14px; }
+#sheet { display: block; }
+.notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 860px) { .notes { grid-template-columns: minmax(0, 1fr); } }
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; min-width: 0; }
+.note h3 { margin: 0 0 6px; font-size: 15px; }
+.note p { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
+.note code { font-family: var(--font-mono); font-size: 12px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); margin-bottom: 8px; }
+#nogl { padding: 20px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .seg button, .actions button { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Liquid QR Lab</h1>
+    <p>Prototype of PrettySwiftQR's appear, disappear and morph transitions as mercury: mass that is never destroyed, threads that stretch and snap, drops that land and spread into the shape. Runs on real matrices exported from the library and settles on its exact outline at any corner radius.</p>
+  </header>
+
+  <section class="bench">
+    <div class="stage">
+      <div class="specimen">
+        <canvas id="gl" aria-label="QR code transition preview"></canvas>
+        <canvas id="diff" hidden></canvas>
+      </div>
+      <div class="scrub">
+        <button id="play" type="button">Replay</button>
+        <input id="progress" type="range" min="0" max="1" step="0.001" value="1" aria-label="Transition progress">
+      </div>
+      <div class="readout">
+        <span>effect <b id="r-effect">rest</b></span>
+        <span>progress <b id="r-p">1.000</b></span>
+        <span>symbol <b id="r-sym">v2 · 25×25</b></span>
+        <span>frame <b id="r-frame">1/1</b></span>
+      </div>
+    </div>
+
+    <aside class="panel">
+      <div class="group">
+        <span class="label">Run</span>
+        <div class="actions">
+          <button type="button" id="a-appear">Appear</button>
+          <button type="button" id="a-disappear">Disappear</button>
+          <button type="button" id="a-morph">Morph to ✓</button>
+          <button type="button" id="a-back" class="secondary">✓ back to code</button>
+        </div>
+        <label class="check"><input type="checkbox" id="slow"> Slow motion (×4)</label>
+      </div>
+      <div class="group">
+        <span class="label">Payload</span>
+        <div class="seg" id="payload">
+          <button type="button" data-v="static" aria-pressed="true">URL · v2</button>
+          <button type="button" data-v="medium">Invoice · v5</button>
+          <button type="button" data-v="animated">Animated UR · v11</button>
+        </div>
+      </div>
+      <div class="group">
+        <span class="label">Resting shape</span>
+        <div class="param"><label for="radiusModule">Module corner radius</label><output id="o-radiusModule"></output><input type="range" id="radiusModule" min="0" max="0.5" step="0.01" value="0.5"></div>
+        <div class="param"><label for="radiusInner">Inner fillet radius</label><output id="o-radiusInner"></output><input type="range" id="radiusInner" min="0" max="0.5" step="0.01" value="0.5"></div>
+        <p class="hint">Finder radii follow <code>QROutlineRadii.derived(module:inner:)</code>.</p>
+        <label class="check"><input type="checkbox" id="diffToggle"> Diff against the library's vector path at rest</label>
+      </div>
+      <div class="group">
+        <span class="label">Liquid</span>
+        <div class="param"><label for="tension">Surface tension</label><output id="o-tension"></output><input type="range" id="tension" min="0" max="0.6" step="0.01" value="0.26"></div>
+        <div class="param"><label for="stagger">Stagger</label><output id="o-stagger"></output><input type="range" id="stagger" min="0.1" max="0.9" step="0.01" value="0.55"></div>
+        <div class="param"><label for="drops">Drop size</label><output id="o-drops"></output><input type="range" id="drops" min="4" max="12" step="1" value="7"></div>
+        <p class="hint">Tension sets how far apart two bodies still join through a neck. Stagger spreads the drops' timing. Drop size is the number of patches the code is cut into, per side.</p>
+      </div>
+      <div class="group copy">
+        <span class="label">Current settings</span>
+        <output id="settingsText"></output>
+        <button type="button" id="copySettings">Copy settings</button>
+      </div>
+    </aside>
+  </section>
+
+  <section class="sheet">
+    <h2>Contact sheet</h2>
+    <p id="sheet-caption">The last effect you ran, sampled at twelve points of its progress. It is drawn after the run finishes.</p>
+    <div class="sheet-scroll"><canvas id="sheet"></canvas></div>
+  </section>
+
+  <section class="notes">
+    <div class="note">
+      <span class="tag">Mass</span>
+      <h3>Nothing vanishes</h3>
+      <p>Every patch of the code is a drop with a mass. A drop that reaches the target shape shrinks only as a bump of the same mass rises where it landed, and the shape's width follows the square root of the mass per length, the way a bead of liquid does. Until the last drop has landed the shape is only as complete as the mass that has arrived.</p>
+    </div>
+    <div class="note">
+      <span class="tag">Threads</span>
+      <h3>Pulled apart, not cut</h3>
+      <p>Neighbouring patches are joined by threads anchored at the cells where they touched. As the drops move apart the thread stretches, thins and beads up in the middle, then snaps: both stubs recoil into their drops with a growing blob at the tip, and the bead is left behind as a satellite drop that is swallowed back by the heavier parent.</p>
+    </div>
+    <div class="note">
+      <span class="tag">Magnets</span>
+      <h3>Appear and disappear</h3>
+      <p>To disappear, the code is pulled toward a sparse scatter of invisible attractors: patches melt into drops, flow to the nearest one, merge with whatever arrived there, and sink. To appear, the same film runs backwards: beads surface, split, and spread into the modules. Drops are nearly circular, elongate only with speed, and relax with a quick decaying wobble.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+const DATA = /*DATA*/null;
+
+// ---------- Shaders ----------
+const VS = `#version 300 es
+in vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+const FIELD_FS = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp usampler2D;
+uniform usampler2D uInfo;          // (n+1)^2: r cell flags, g fillet code at lattice corner (bits 0-2) and fillets the cell owns (bits 3-6: tl, tr, br, bl), b dark neighbours (l,u,r,d), a droplet id
+uniform highp sampler2D uState;    // 5 x N per-drop state for this frame (see simulate()); column 4 is the order the drops join in
+uniform highp sampler2D uBondState;// 4 x B per-bond state for this frame
+uniform highp sampler2D uProfile;  // PROFILE_N x 1: target half-width along the stroke (negative where nothing has landed)
+uniform highp sampler2D uAttach;   // n x n per frame: each cell's sides (l,u,r,d), see sideAttach()
+uniform int uN;
+uniform float uQuiet;
+uniform vec2 uRes;
+uniform vec3 uRect;                // x, y (top-left), side, in backing pixels
+uniform int uMode;                 // 0 rest, 3 flow to target, 4 pull apart
+uniform vec4 uRadii;               // module, inner, finderOuter, finderInner
+uniform float uFinderCenter;
+uniform float uTension;
+uniform int uNDrops, uNBonds;
+uniform vec2 uPoly[4];
+uniform int uPolyN;
+uniform float uPolyLen;
+uniform vec3 uFg, uBg;
+out vec4 outColor;
+
+const int PROFILE_N = 512;
+
+uint cellFlags(ivec2 c) { if (c.x < 0 || c.y < 0 || c.x >= uN || c.y >= uN) return 0u; return texelFetch(uInfo, c, 0).r; }
+uint filletCode(ivec2 c) { if (c.x < 0 || c.y < 0 || c.x > uN || c.y > uN) return 0u; return texelFetch(uInfo, c, 0).g & 7u; }
+int dropletOf(ivec2 c) { if (c.x < 0 || c.y < 0 || c.x >= uN || c.y >= uN) return -1; return int(texelFetch(uInfo, c, 0).a); }
+vec2 quadOf(uint code) { return code == 1u ? vec2(-1, -1) : code == 2u ? vec2(1, -1) : code == 3u ? vec2(-1, 1) : vec2(1, 1); }
+float meltOf(int i) { return texelFetch(uState, ivec2(1, i), 0).w; }
+
+// Rounded box, per-corner radii (tl, tr, br, bl), y down.
+float sdRBox(vec2 p, vec2 b, vec4 r) {
+  float rr = p.x > 0.0 ? (p.y > 0.0 ? r.z : r.y) : (p.y > 0.0 ? r.w : r.x);
+  rr = clamp(rr, 0.0, min(b.x, b.y));
+  vec2 q = abs(p) - b + rr;
+  return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - rr;
+}
+float sdBox(vec2 p, vec2 b) { vec2 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
+float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0); return length(pa - ba * h); }
+// A liquid bridge from a to b: radius r at its waist, widening toward its feet (ra at a, rb at b
+// as multiples of r) along concave sides, the way a stretched liquid neck looks, never a bar.
+float sdBridge(vec2 p, vec2 a, vec2 b, float r, float ra, float rb, float waist) {
+  vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+  float side = h < waist ? 1.0 - h / waist : (h - waist) / (1.0 - waist);
+  float foot = h < waist ? ra : rb;
+  return length(pa - ba * h) - r * (1.0 + (foot - 1.0) * side * side);
+}
+float smin(float a, float b, float k) {
+  if (k < 1e-4) return min(a, b);
+  k *= 4.0; float h = max(k - abs(a - b), 0.0) / k; return min(a, b) - h * h * k * 0.25;
+}
+// The concave fillet: inside the r x r square at the lattice corner, outside the circle of radius r.
+// The square reaches 0.3 back over the corner so its union with the cells has no seam.
+float sdFillet(vec2 p, vec2 c, vec2 q, float r) {
+  return max(sdBox(p - (c + q * (r - 0.3) * 0.5), vec2((r + 0.3) * 0.5)), r - length(p - (c + q * r)));
+}
+// A module. Sides that touch a dark neighbour reach ext into it: a plain min() of two abutting
+// boxes is 0 along the shared edge, which antialiases to a visible hairline. Only the cell that
+// contains the pixel is extended; extending its neighbours too would poke their corners into a
+// diagonal light cell at every concave corner.
+float sdCell(vec2 p, ivec2 c, float h, vec4 r, float ext) {
+  uint nb = texelFetch(uInfo, c, 0).b;
+  vec4 e = vec4((nb & 1u) != 0u ? ext : 0.0, (nb & 2u) != 0u ? ext : 0.0, (nb & 4u) != 0u ? ext : 0.0, (nb & 8u) != 0u ? ext : 0.0);
+  return sdRBox(p - vec2(e.z - e.x, e.w - e.y) * 0.5, vec2(h) + vec2(e.x + e.z, e.y + e.w) * 0.5, r);
+}
+vec4 cornerRadii(uint f) {
+  float r = uRadii.x;
+  return vec4((f & 2u) != 0u ? r : 0.0, (f & 4u) != 0u ? r : 0.0, (f & 8u) != 0u ? r : 0.0, (f & 16u) != 0u ? r : 0.0);
+}
+// A side's state while moving: 0 light, 1 a cell of the same drop, and in between a cell of another
+// drop, encoded 0.02 + 0.48 * attachment (attachment is 1 at rest and falls to 0 as the two drops
+// tear apart).
+float sideAttach(float v) { return v > 0.75 ? 1.0 : clamp((v - 0.02) / 0.48, 0.0, 1.0); }
+// A box grown by e = (left, up, right, down).
+float sdTab(vec2 p, float h, vec4 e, vec4 r) {
+  return sdRBox(p - vec2(e.z - e.x, e.w - e.y) * 0.5, vec2(h) + vec2(e.x + e.z, e.y + e.w) * 0.5, r);
+}
+// A cell is looked up only while it lies in the window around the pixel. Its field is raised
+// smoothly as its centre nears the window's edge (Chebyshev distance b, beyond which it may be
+// missing), so cells leave the lookup without a trace instead of leaving a step in the edge.
+float windowFade(vec2 rel, float a, float b) {
+  float t = max(max(abs(rel.x), abs(rel.y)) - a, 0.0) / (b - a);
+  return 6.0 * t * t;
+}
+// A module while the code is moving. Where it touches a cell of another drop that is tearing away,
+// the corners on that side round off as the tear opens, and the overlap that hides the seam
+// (a tab reaching into the neighbour) shrinks with it. The tab is drawn for every pixel, not just
+// inside the cell, so the field stays continuous as the two cells part; it reaches out along one
+// axis at a time so it never pokes into a diagonal light cell. own: the pixel is inside this cell,
+// which may also reach into cells of its own drop (ownExt) to hide the seams between them.
+float sdCellLive(vec2 p, ivec2 c, float h, float rnd, bool own, float ownExt) {
+  vec4 v = texelFetch(uAttach, c, 0);
+  vec4 same = step(0.75, v), light = 1.0 - step(0.01, v);
+  vec4 a = vec4(sideAttach(v.x), sideAttach(v.y), sideAttach(v.z), sideAttach(v.w)) * (1.0 - light);
+  vec4 torn = (1.0 - same) * a;
+  vec4 open = 1.0 - max(a, a.yzwx);
+  vec4 r = mix(0.5 * open, vec4(uRadii.x), light * light.yzwx);
+  // Melting rounds the corners that face out; a corner where the cell still joins another stays
+  // square, or the two rounded corners would cut a notch into the edge between them.
+  r = mix(r, vec4(h), rnd * open);
+  if (own) return sdTab(p, h, 0.5 * (same * ownExt + torn), r);
+  float d = sdRBox(p, vec2(h), r);
+  vec4 e = 0.5 * torn;
+  if (e.x + e.z > 0.0) d = min(d, sdTab(p, h, vec4(e.x, 0.0, e.z, 0.0), r));
+  if (e.y + e.w > 0.0) d = min(d, sdTab(p, h, vec4(0.0, e.y, 0.0, e.w), r));
+  return d;
+}
+// The concave fillets a cell owns (corners where both neighbours are dark and the diagonal cell is
+// light) while moving: pushed g into the light cell, the way the grown cells push the corner, and
+// fading with the attachment of the two cells they join it to.
+float ownedFillets(vec2 p, ivec2 c, float g, float r) {
+  uint bits = (texelFetch(uInfo, c, 0).g >> 3) & 15u;
+  if (bits == 0u || r <= 0.0) return 1e3;
+  vec4 v = texelFetch(uAttach, c, 0);
+  float d = 1e3;
+  for (int k = 0; k < 4; k++) {
+    if ((bits & (1u << uint(k))) == 0u) continue;
+    vec2 qd = k == 0 ? vec2(-1, -1) : k == 1 ? vec2(1, -1) : k == 2 ? vec2(1, 1) : vec2(-1, 1);
+    vec2 L = vec2(c) + max(qd, 0.0);
+    float rk = r * min(sideAttach(qd.x < 0.0 ? v.x : v.z), sideAttach(qd.y < 0.0 ? v.y : v.w));
+    if (rk > 0.0) d = min(d, sdFillet(p, L + qd * g, qd, rk));
+  }
+  return d;
+}
+vec2 finderCentre(int i) { float n = float(uN); return i == 0 ? vec2(3.5) : (i == 1 ? vec2(n - 3.5, 3.5) : vec2(3.5, n - 3.5)); }
+// s: scale, form: 0 round blob -> 1 final radii, open: 0 eye closed -> 1 open.
+float sdFinder(vec2 p, float s, float form, float open) {
+  float ho = 3.5 * s, hi = 2.5 * s * open, hc = 1.5 * s;
+  float outer = sdRBox(p, vec2(ho), vec4(mix(ho, uRadii.z * s, form)));
+  float hole = sdRBox(p, vec2(hi), vec4(mix(hi, uRadii.w * s * open, form)));
+  float centre = sdRBox(p, vec2(hc), vec4(mix(hc, uFinderCenter * s, form)));
+  return min(max(outer, -hole), centre);
+}
+
+// ---- the code at rest: cells, fillets and finders straight from the grid ----
+// When moving is true, only the parts whose drop has not started yet are drawn (the rest come
+// from their drops), which keeps the start of a transition as cheap as the resting symbol.
+float fieldRest(vec2 q, bool moving) {
+  ivec2 c0 = ivec2(floor(q));
+  float d = 1e3;
+  for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+    ivec2 c = c0 + ivec2(dx, dy);
+    uint f = cellFlags(c);
+    if ((f & 1u) == 0u) continue;
+    if (!moving) { d = min(d, sdCell(q - (vec2(c) + 0.5), c, 0.5, cornerRadii(f), c == c0 ? 0.5 : 0.0)); continue; }
+    if (meltOf(dropletOf(c)) > 0.0) continue;
+    vec2 rel = q - (vec2(c) + 0.5);
+    d = min(d, sdCellLive(rel, c, 0.5, 0.0, c == c0, 1.0) + windowFade(rel, 1.0, 1.5));
+    d = min(d, ownedFillets(q, c, 0.0, uRadii.y) + windowFade(rel, 1.1, 1.5));
+  }
+  if (!moving && uRadii.y > 0.0) for (int j = 0; j <= 1; j++) for (int i = 0; i <= 1; i++) {
+    ivec2 L = c0 + ivec2(i, j);
+    uint code = filletCode(L);
+    if (code == 0u) continue;
+    d = min(d, sdFillet(q, vec2(L), quadOf(code), uRadii.y));
+  }
+  for (int i = 0; i < 3; i++) {
+    if (moving && meltOf(uNDrops - 3 + i) > 0.0) continue;
+    d = min(d, sdFinder(q - finderCentre(i), 1.0, 1.0, 1.0));
+  }
+  return d;
+}
+
+// ---- mercury: drops, threads and the mass-built target. All motion comes from the CPU. ----
+struct DS { vec2 pos; float Reff; float lam; vec2 dir; float st; float m; float wob; float wobAng; float l; float u; vec2 cen; float ext; float finder; };
+DS fetchState(int i) {
+  vec4 t0 = texelFetch(uState, ivec2(0, i), 0), t1 = texelFetch(uState, ivec2(1, i), 0);
+  vec4 t2 = texelFetch(uState, ivec2(2, i), 0), t3 = texelFetch(uState, ivec2(3, i), 0);
+  DS s; s.pos = t0.xy; s.Reff = t0.z; s.lam = t0.w; s.dir = t1.xy; s.st = t1.z; s.m = t1.w;
+  s.wob = t2.x; s.wobAng = t2.y; s.l = t2.z; s.u = t2.w; s.cen = t3.xy; s.ext = t3.z; s.finder = t3.w;
+  return s;
+}
+// Maps a point relative to the drop's centre into the undeformed drop. A moving drop is stretched
+// along its direction (and thinned across, the way a 3D drop's silhouette changes); a wobbling drop
+// is a slight ellipse along a random axis.
+vec2 undeform(vec2 lp, DS s) {
+  float al = dot(lp, s.dir); vec2 pe = lp - s.dir * al;
+  vec2 p = s.dir * (al / s.st) + pe * sqrt(s.st);
+  vec2 ax = vec2(cos(s.wobAng), sin(s.wobAng));
+  float a2 = dot(p, ax); vec2 p2 = p - ax * a2;
+  return ax * (a2 / (1.0 + s.wob)) + p2 / (1.0 - s.wob);
+}
+float dropPiece(int i, vec2 q) {
+  DS s = fetchState(i);
+  // Beyond r0 every part of the piece is further than the join's reach, so it fades out over the
+  // next 0.6 instead of being cut off (a cut shows as a kink wherever a join was still active).
+  float stw = s.st * (1.0 + abs(s.wob));
+  float r0 = stw * (max((s.ext + 0.7 * s.m + 0.6) * s.lam, s.Reff) + uTension * 3.6 * sqrt(s.st)) + 0.05;
+  float r = length(q - s.pos);
+  if (r > r0 + 0.6) return 1e3;
+  float fade = 4.0 * smoothstep(r0, r0 + 0.6, r);
+  // A drop that has shrunk to nothing lets go of its neighbours before it vanishes.
+  float gone = 1.0 - smoothstep(0.0, 0.06, s.Reff);
+  vec2 lp = undeform(q - s.pos, s);
+  float bead = length(lp) - s.Reff;
+  float corr = 1.0 / sqrt(s.st);
+  if (s.m >= 0.999) return bead * corr + gone + fade;
+  // The patch's own cells, still in their original frame but contracted toward the centre.
+  vec2 src = s.cen + lp / s.lam;
+  float grow = 1.0 + 0.9 * s.m, rnd = smoothstep(0.0, 0.6, s.m);
+  float ks = uTension * 3.0 * s.m;
+  float dc = 1e3;
+  if (s.finder > 0.5) {
+    dc = sdFinder(src - s.cen, 1.0, 1.0 - smoothstep(0.0, 0.7, s.m), 1.0 - smoothstep(0.0, 0.6, s.m));
+  } else {
+    ivec2 c0 = ivec2(floor(src));
+    float h = 0.5 * grow, ownExt = 1.0 - smoothstep(0.0, 0.1, s.m);
+    // Light cells inside the patch close as round pores: their fillets follow the grown cells
+    // and round up to the size of the pore that is left.
+    float g = 0.45 * s.m, rf = min(mix(uRadii.y, 0.5, rnd), 0.5 - g);
+    // The lookup window widens from the resting field's 3 x 3 to 5 x 5 as the drop starts, so a
+    // drop that has just started is exactly what the resting field drew in its place.
+    float wo = smoothstep(0.0, 0.2, s.m), fa = mix(1.0, 1.8, wo), fb = mix(1.5, 2.5, wo), fl = mix(1.1, 1.8, wo);
+    for (int dy = -2; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++) {
+      ivec2 c = c0 + ivec2(dx, dy);
+      uint f = cellFlags(c);
+      if ((f & 1u) == 0u || dropletOf(c) != i) continue;
+      vec2 rel = src - (vec2(c) + 0.5);
+      dc = smin(dc, sdCellLive(rel, c, h, rnd, c == c0, ownExt) + windowFade(rel, fa, fb), ks);
+      dc = min(dc, ownedFillets(src, c, g, rf) + windowFade(rel, fl, fb));
+    }
+  }
+  float cells = min(dc, 2.5) * s.lam;
+  // The cells become the bead only where the bead already is. Cells still outside it keep their
+  // shape and are carried in by the contraction, so no part of a patch fades out before it has
+  // reached the drop; by the end everything is inside and the blend completes.
+  float m4 = s.m * s.m * s.m * s.m;
+  float w = smoothstep(0.15, 1.0, s.m) * mix(1.0 - smoothstep(0.4, 1.2, bead), 1.0, m4);
+  return mix(cells, bead, w) * corr + gone + fade;
+}
+float bondPiece(int b, vec2 q) {
+  vec4 t0 = texelFetch(uBondState, ivec2(0, b), 0); // thread A, B
+  vec4 t1 = texelFetch(uBondState, ivec2(1, b), 0); // rThread, rStub, rTip, rSat
+  vec4 t2 = texelFetch(uBondState, ivec2(2, b), 0); // stub ends EA, EB
+  vec4 t3 = texelFetch(uBondState, ivec2(3, b), 0); // satellite position, join strength
+  // The parts flow into each other: a bead on a thread or a blob on a stub has a waist, not a
+  // corner where the two meet.
+  float d = 1e3, kb = 0.06;
+  if (t1.x > 0.005) d = sdBridge(q, t0.xy, t0.zw, t1.x, 2.2, 2.2, 0.5);
+  if (t1.y > 0.02) {
+    d = smin(d, sdBridge(q, t0.xy, t2.xy, t1.y, 2.0, 1.0, 1.0), kb);
+    d = smin(d, sdBridge(q, t0.zw, t2.zw, t1.y, 2.0, 1.0, 1.0), kb);
+    d = smin(d, length(q - t2.xy) - t1.z, kb);
+    d = smin(d, length(q - t2.zw) - t1.z, kb);
+  }
+  if (t1.w > 0.03) d = smin(d, length(q - t3.xy) - t1.w, kb);
+  return d;
+}
+float sampleProfile(float x) {
+  float fx = x * float(PROFILE_N) - 0.5;
+  int i0 = int(floor(fx)); float f = fx - float(i0);
+  int i1 = clamp(i0 + 1, 0, PROFILE_N - 1); i0 = clamp(i0, 0, PROFILE_N - 1);
+  return mix(texelFetch(uProfile, ivec2(i0, 0), 0).r, texelFetch(uProfile, ivec2(i1, 0), 0).r, f);
+}
+// Each segment carries its own width, so the field stays continuous across the corner's bisector.
+float strokeField(vec2 q) {
+  float d = 1e3, cum = 0.0;
+  for (int i = 0; i < 3; i++) {
+    if (i >= uPolyN - 1) break;
+    vec2 a = uPoly[i], ab = uPoly[i + 1] - a; float L = length(ab);
+    float h = clamp(dot(q - a, ab) / dot(ab, ab), 0.0, 1.0);
+    d = min(d, length(q - a - ab * h) - sampleProfile((cum + h * L) / uPolyLen));
+    cum += L;
+  }
+  return d;
+}
+float fieldMercury(vec2 q) {
+  float d = fieldRest(q, true);
+  float kg = uTension * 0.9;
+  // Drops join in order of when they start, latest first: a drop that has just started then takes
+  // the place it had in the resting field, which every earlier drop has already joined.
+  for (int k = 0; k < 160; k++) {
+    if (k >= uNDrops) break;
+    int i = int(texelFetch(uState, ivec2(4, k), 0).x + 0.5);
+    float m = meltOf(i);
+    if (m <= 0.0) continue;
+    // The neck strength grows in with the melt, so a patch that has just started moving still
+    // meets its untouched neighbours with the plain union it had at rest.
+    d = smin(d, dropPiece(i, q), kg * min(1.0, m * 8.0));
+  }
+  for (int b = 0; b < 200; b++) { if (b >= uNBonds) break; d = smin(d, bondPiece(b, q), kg * texelFetch(uBondState, ivec2(3, b), 0).z); }
+  if (uMode == 3) d = smin(d, strokeField(q), uTension * 1.5);
+  return d;
+}
+
+float coverage(float d, float pw) { return clamp(0.5 - d / pw, 0.0, 1.0); }
+// While animating the field is not a true distance (smooth-min, deformation), so antialias over its
+// screen-space gradient rather than assuming one unit per pixel.
+float coverageGrad(float d, float pw) {
+  float g = clamp(length(vec2(dFdx(d), dFdy(d))), pw * 0.1, pw * 3.0);
+  return clamp(0.5 - d / g, 0.0, 1.0);
+}
+
+void main() {
+  vec2 px = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  float n = float(uN);
+  float scale = uRect.z / (n + 2.0 * uQuiet);
+  float pw = 1.0 / scale;
+  vec2 q = (px - uRect.xy) * pw - uQuiet;
+  float cov = uMode == 0 ? coverage(fieldRest(q, false), pw) : coverageGrad(min(fieldMercury(q), 1e2), pw);
+  outColor = vec4(mix(uBg, uFg, cov), 1.0);
+}`;
+
+// ---------- Geometry on the CPU ----------
+function compile(gl, type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(gl, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, VS)); gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fs));
+  gl.bindAttribLocation(p, 0, 'aPos'); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; const count = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < count; i++) { const info = gl.getActiveUniform(p, i); u[info.name.replace('[0]', '')] = gl.getUniformLocation(p, info.name); }
+  return { p, u };
+}
+
+const PROFILE_N = 512;
+const PI = Math.PI;
+const CHECK_W_MOD = 0.078;
+// Fixed under the mercury model: how hard a freed drop rings, and how much the timing is randomised.
+const WOBBLE = 0.45, JITTER = 0.5;
+const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+const win = (P, a, b) => clamp((P - a) / Math.max(1e-3, b - a), 0, 1);
+const ss = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const smoother = (u) => { u = clamp(u, 0, 1); return u * u * u * (u * (u * 6 - 15) + 10); };
+const smootherSpeed = (u) => { u = clamp(u, 0, 1); return 16 * u * u * (1 - u) * (1 - u); };
+const fract = (x) => x - Math.floor(x);
+function hash12(x, y) { let px = fract(x * 0.1031), py = fract(y * 0.1031), pz = fract(x * 0.1031); const d = px * (py + 33.33) + py * (pz + 33.33) + pz * (px + 33.33); px += d; py += d; pz += d; return fract((px + py) * pz); }
+
+function isDark(n, bits, x, y) {
+  if (x < 0 || y < 0 || x >= n || y >= n) return false;
+  if ((x < 7 && y < 7) || (x >= n - 7 && y < 7) || (x < 7 && y >= n - 7)) return false;
+  return bits.charCodeAt(y * n + x) === 49;
+}
+// Modules are grouped into droplets by a jittered Voronoi so the morph has no visible grid.
+function dropletSeeds(n, G) {
+  const seeds = [];
+  for (let b = 0; b < G; b++) for (let a = 0; a < G; a++) {
+    const h1 = Math.abs(Math.sin((a * 127.1 + b * 311.7) * 0.731) * 43758.5453) % 1;
+    const h2 = Math.abs(Math.sin((a * 269.5 + b * 183.3) * 0.913) * 43758.5453) % 1;
+    seeds.push([(a + 0.5 + (h1 - 0.5) * 0.7) * n / G, (b + 0.5 + (h2 - 0.5) * 0.7) * n / G]);
+  }
+  return seeds;
+}
+function dropletId(seeds, x, y) {
+  let best = 0, bestD = Infinity;
+  for (let k = 0; k < seeds.length; k++) {
+    const dx = seeds[k][0] - (x + 0.5), dy = seeds[k][1] - (y + 0.5), d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; best = k; }
+  }
+  return best;
+}
+
+// The checkmark, two strokes, in module units.
+function checkPoly(n) { return [[0.25 * n, 0.53 * n], [0.43 * n, 0.71 * n], [0.76 * n, 0.31 * n]]; }
+function polyLengths(pts) { const L = [0]; for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])); return L; }
+function polyPoint(pts, L, s) {
+  s = clamp(s, 0, L[L.length - 1]);
+  for (let i = 1; i < pts.length; i++) if (s <= L[i] || i === pts.length - 1) {
+    const t = (s - L[i - 1]) / Math.max(1e-6, L[i] - L[i - 1]);
+    return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t];
+  }
+  return pts[0];
+}
+function polyClosest(pts, L, x, y) {
+  let best = Infinity, s = 0, su = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const ax = pts[i - 1][0], ay = pts[i - 1][1], bx = pts[i][0] - ax, by = pts[i][1] - ay, len = Math.hypot(bx, by);
+    const t = ((x - ax) * bx + (y - ay) * by) / (bx * bx + by * by), tc = clamp(t, 0, 1);
+    const d = Math.hypot(x - ax - bx * tc, y - ay - by * tc);
+    if (d < best) { best = d; s = L[i - 1] + tc * len; su = L[i - 1] + t * len; }
+  }
+  return { dist: best, s, su };
+}
+
+// Builds everything that depends only on the matrix: drops (patches + finders), the threads
+// between neighbouring patches, where each drop lands on the target, and the magnets.
+function buildModel(n, bits, G) {
+  const seeds = dropletSeeds(n, G);
+  const members = Array.from({ length: G * G }, () => []);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (isDark(n, bits, x, y)) members[dropletId(seeds, x, y)].push([x, y]);
+  const drops = [], idMap = new Int16Array(G * G).fill(-1);
+  members.forEach((m, k) => {
+    if (!m.length) return;
+    idMap[k] = drops.length;
+    const cx = m.reduce((s, p) => s + p[0] + 0.5, 0) / m.length, cy = m.reduce((s, p) => s + p[1] + 0.5, 0) / m.length;
+    const ext = Math.max(...m.map((p) => Math.hypot(p[0] + 0.5 - cx, p[1] + 0.5 - cy))) + 0.71;
+    drops.push({ cx, cy, mass: m.length, ext, finder: 0, R: 0.72 * Math.sqrt(m.length / PI) });
+  });
+  for (const [ox, oy] of [[0, 0], [n - 7, 0], [0, n - 7]]) drops.push({ cx: ox + 3.5, cy: oy + 3.5, mass: 33, ext: 3.5 * Math.SQRT2, finder: 1, R: 0.72 * Math.sqrt(33 / PI) });
+  drops.forEach((d, i) => { d.phase = hash12(i * 1.9 + 7.7, 5.1) * PI; d.jit = hash12(i * 5.3 + 0.3, 9.9); d.order = hash12(Math.floor(d.cx) + 0.37, Math.floor(d.cy) + 0.37); });
+  // Threads: between patches that share cell edges, anchored at the nearest touching pair.
+  const adj = new Map();
+  const cellId = (x, y) => idMap[dropletId(seeds, x, y)];
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    if (!isDark(n, bits, x, y)) continue;
+    const ia = cellId(x, y);
+    for (const [dx, dy] of [[1, 0], [0, 1]]) {
+      if (!isDark(n, bits, x + dx, y + dy)) continue;
+      const ib = cellId(x + dx, y + dy);
+      if (ia === ib) continue;
+      const key = ia < ib ? `${ia},${ib}` : `${ib},${ia}`;
+      if (!adj.has(key)) adj.set(key, { count: 0, pairs: [] });
+      const e = adj.get(key); e.count++;
+      e.pairs.push(ia < ib ? [x + 0.5, y + 0.5, x + dx + 0.5, y + dy + 0.5] : [x + dx + 0.5, y + dy + 0.5, x + 0.5, y + 0.5]);
+    }
+  }
+  const bonds = [], perDrop = new Int8Array(drops.length);
+  for (const [key, e] of [...adj.entries()].sort((p, q) => q[1].count - p[1].count)) {
+    const [i, j] = key.split(',').map(Number);
+    if (perDrop[i] >= 2 || perDrop[j] >= 2) continue;
+    perDrop[i]++; perDrop[j]++;
+    const mx = (drops[i].cx + drops[j].cx) / 2, my = (drops[i].cy + drops[j].cy) / 2;
+    const pair = e.pairs.reduce((best, p) => (Math.hypot((p[0] + p[2]) / 2 - mx, (p[1] + p[3]) / 2 - my) < Math.hypot((best[0] + best[2]) / 2 - mx, (best[1] + best[3]) / 2 - my) ? p : best));
+    bonds.push({ a: i, b: j, r0: 0.3 + 0.08 * Math.min(e.count, 4), anchorA: [pair[0], pair[1]], anchorB: [pair[2], pair[3]] });
+  }
+  // Landing spots on the target, balanced by mass so the whole stroke fills evenly.
+  const pts = checkPoly(n), L = polyLengths(pts), total = L[L.length - 1];
+  const M = drops.reduce((s, d) => s + d.mass, 0);
+  const projected = drops.map((d, i) => Object.assign({ i }, polyClosest(pts, L, d.cx, d.cy)));
+  projected.sort((p, q) => p.su - q.su || p.dist - q.dist);
+  let cum = 0;
+  projected.forEach((p, k) => {
+    const d = drops[p.i];
+    const a = cum / M * total, b = (cum + d.mass) / M * total; cum += d.mass;
+    const sc = clamp((a + b) / 2, 0, total);
+    const T = polyPoint(pts, L, sc);
+    d.poly = { a: k === 0 ? -1e4 : a, b: k === projected.length - 1 ? 1e4 : b, s: sc, T, key: Math.hypot(T[0] - d.cx, T[1] - d.cy) / (0.7 * n) };
+  });
+  // Magnets for pulling apart: a sparse scatter of points; every drop flows to its nearest one.
+  const K = Math.max(6, Math.round(drops.length / 4)), magnets = [];
+  for (let k = 0; k < K; k++) magnets.push([(0.08 + 0.84 * hash12(k * 7.3 + 0.5, 11.1)) * n, (0.08 + 0.84 * hash12(k * 3.1 + 2.9, 17.7)) * n]);
+  drops.forEach((d, i) => {
+    let best = magnets[0], bd = Infinity;
+    for (const mg of magnets) { const dd = Math.hypot(mg[0] - d.cx, mg[1] - d.cy); if (dd < bd) { bd = dd; best = mg; } }
+    d.mag = { T: [best[0] + (hash12(i * 1.3 + 4.4, 8.2) - 0.5) * 1.2, best[1] + (hash12(i * 2.7 + 6.1, 9.4) - 0.5) * 1.2] };
+  });
+  const cellDrop = new Int16Array(n * n).fill(-1);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (isDark(n, bits, x, y)) cellDrop[y * n + x] = idMap[dropletId(seeds, x, y)];
+  return { n, bits, G, drops, bonds, idMap, seeds, magnets, cellDrop, poly: { pts, L, total }, info: buildInfo(n, bits, seeds, idMap) };
+}
+function buildInfo(n, bits, seeds, idMap) {
+  const W = n + 1, data = new Uint8Array(W * W * 4);
+  const dark = (x, y) => isDark(n, bits, x, y);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    if (!dark(x, y)) continue;
+    const l = dark(x - 1, y), r = dark(x + 1, y), u = dark(x, y - 1), d = dark(x, y + 1);
+    let f = 1;
+    if (!l && !u) f |= 2; if (!r && !u) f |= 4; if (!r && !d) f |= 8; if (!l && !d) f |= 16;
+    const i = (y * W + x) * 4;
+    data[i] = f;
+    data[i + 2] = (l ? 1 : 0) | (u ? 2 : 0) | (r ? 4 : 0) | (d ? 8 : 0);
+    data[i + 3] = idMap[dropletId(seeds, x, y)];
+    const owns = (l && u && !dark(x - 1, y - 1) ? 1 : 0) | (u && r && !dark(x + 1, y - 1) ? 2 : 0) | (r && d && !dark(x + 1, y + 1) ? 4 : 0) | (d && l && !dark(x - 1, y + 1) ? 8 : 0);
+    data[i + 1] |= owns << 3;
+  }
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
+    const tl = dark(i - 1, j - 1), tr = dark(i, j - 1), bl = dark(i - 1, j), br = dark(i, j);
+    if (tl + tr + bl + br !== 3) continue;
+    data[(j * W + i) * 4 + 1] |= !tl ? 1 : !tr ? 2 : !bl ? 3 : 4;
+  }
+  return data;
+}
+
+// ---------- The animation: one progress value per drop, everything else derived from it ----------
+function dropState(d, P, mode, prm) {
+  const key = mode === 3 ? clamp(d.poly.key + JITTER * (d.jit - 0.5) * 0.4, 0, 1) : d.order;
+  const S = prm.stagger;
+  const t0 = 0.5 * S * key, t1 = 1 - 0.5 * S * (1 - key);
+  const u = win(P, t0, t1);
+  const m = ss(0, 0.6, u);
+  const tw = win(u, 0.12, 0.9), e = smoother(tw), speed = smootherSpeed(tw);
+  const l = ss(0.7, 0.97, u);
+  const T = mode === 3 ? d.poly.T : d.mag.T;
+  const tx = T[0] - d.cx, ty = T[1] - d.cy, len = Math.hypot(tx, ty);
+  const dir = len > 1e-3 ? [tx / len, ty / len] : [1, 0];
+  const pos = [d.cx + tx * e, d.cy + ty * e];
+  const st = 1 + 0.35 * speed * Math.min(1, len / 6);
+  const Reff = d.R * Math.sqrt(Math.max(0, 1 - l));
+  const lam = 1 + (0.24 - 1) * m;
+  const tt = Math.max(0, u - 0.45);
+  const wob = WOBBLE * 0.2 * Math.exp(-6 * tt) * Math.sin(2 * PI * 2.5 * tt) * (1 - l);
+  const to = win(u, 0.85, 1);
+  const h = d.R * (0.7 + 0.7 * ss(0.8, 1, u)) + d.R * 0.35 * Math.sin(2 * PI * to) * Math.exp(-2 * to) * (1 - to);
+  return { u, m, e, l, pos, dir, st, Reff, lam, wob, h, t0, t1 };
+}
+// Where a cell of the patch is now: contracted toward the centre, moved, stretched, wobbled.
+function cellNow(d, s, cell) {
+  let lx = (cell[0] - d.cx) * s.lam, ly = (cell[1] - d.cy) * s.lam;
+  const al = lx * s.dir[0] + ly * s.dir[1], px = lx - s.dir[0] * al, py = ly - s.dir[1] * al;
+  lx = s.dir[0] * al * s.st + px / Math.sqrt(s.st); ly = s.dir[1] * al * s.st + py / Math.sqrt(s.st);
+  const ax = Math.cos(d.phase), ay = Math.sin(d.phase), a2 = lx * ax + ly * ay, qx = lx - ax * a2, qy = ly - ay * a2;
+  lx = ax * a2 * (1 + s.wob) + qx * (1 - s.wob); ly = ay * a2 * (1 + s.wob) + qy * (1 - s.wob);
+  return [s.pos[0] + lx, s.pos[1] + ly];
+}
+function Phi(x) { return 0.5 + 0.5 * Math.tanh(1.2 * x); }
+
+const SNAP = 0.32;
+// How much melt it takes two touching drops to tear apart (corners round, the seam overlap shrinks).
+const TEAR = 0.2;
+function simulate(model, P, mode, prm) {
+  const { drops, bonds } = model;
+  const N = drops.length, B = bonds.length;
+  const states = drops.map((d) => dropState(d, P, mode, prm));
+  const sdata = new Float32Array(N * 20);
+  states.forEach((s, i) => {
+    const d = drops[i], o = i * 20;
+    sdata[o] = s.pos[0]; sdata[o + 1] = s.pos[1]; sdata[o + 2] = s.Reff; sdata[o + 3] = s.lam;
+    sdata[o + 4] = s.dir[0]; sdata[o + 5] = s.dir[1]; sdata[o + 6] = s.st; sdata[o + 7] = s.m;
+    sdata[o + 8] = s.wob; sdata[o + 9] = d.phase; sdata[o + 10] = s.l; sdata[o + 11] = s.u;
+    sdata[o + 12] = d.cx; sdata[o + 13] = d.cy; sdata[o + 14] = d.ext; sdata[o + 15] = d.finder;
+  });
+  // The order the drops join in: latest start first. It never changes during a run.
+  states.map((s, i) => i).sort((a, b) => states[b].t0 - states[a].t0 || a - b).forEach((i, k) => { sdata[k * 20 + 16] = i; });
+  const bdata = new Float32Array(Math.max(1, B) * 16);
+  bonds.forEach((b, k) => {
+    const A = drops[b.a], Bd = drops[b.b], sa = states[b.a], sb = states[b.b];
+    const ub = Math.max(sa.u, sb.u);
+    const pa = cellNow(A, sa, b.anchorA), pb = cellNow(Bd, sb, b.anchorB);
+    const o = k * 16;
+    bdata[o] = pa[0]; bdata[o + 1] = pa[1]; bdata[o + 2] = pb[0]; bdata[o + 3] = pb[1];
+    const rs0 = 0.32 + 0.25 * b.r0;
+    const tb = win(ub, 0.1, SNAP);
+    const lenF = Math.sqrt(Math.min(1, 1.5 / Math.max(1, Math.hypot(pb[0] - pa[0], pb[1] - pa[1]))));
+    if (tb < 1) {
+      // Thread: it grows in from nothing as the two patches begin to pull apart (at rest it must
+      // not exist, or its join would inflate the outline), stretches between the anchors, thins
+      // as it lengthens, and towards the end beads up in the middle; that bead becomes the
+      // satellite at the snap. Its join strength (t3.z) ramps with it.
+      const born = ss(0, 0.4, tb);
+      bdata[o + 4] = b.r0 * lenF * (0.3 + 0.7 * Math.pow(1 - tb, 0.6)) * born;
+      bdata[o + 7] = rs0 * ss(0.55, 1, tb);
+      bdata[o + 12] = (pa[0] + pb[0]) / 2; bdata[o + 13] = (pa[1] + pb[1]) / 2;
+      bdata[o + 14] = born;
+      return;
+    }
+    // Snapped. Where it broke: the anchors' midpoint at the moment the thread reached its limit.
+    const Pb = Math.min(sa.t0 + SNAP * (sa.t1 - sa.t0), sb.t0 + SNAP * (sb.t1 - sb.t0));
+    const sab = dropState(A, Pb, mode, prm), sbb = dropState(Bd, Pb, mode, prm);
+    const pab = cellNow(A, sab, b.anchorA), pbb = cellNow(Bd, sbb, b.anchorB);
+    const M = [(pab[0] + pbb[0]) / 2, (pab[1] + pbb[1]) / 2];
+    const lenB = Math.sqrt(Math.min(1, 1.5 / Math.max(1, Math.hypot(pbb[0] - pab[0], pbb[1] - pab[1]))));
+    const rSnap = 0.3 * b.r0 * lenB;
+    // Stubs recoil into their drops; the retracted liquid collects in a blob at the tip.
+    const tr = win(ub, SNAP, SNAP + 0.07);
+    bdata[o + 5] = rSnap * Math.pow(1 - tr, 0.6);
+    bdata[o + 6] = rSnap * (1 + 1.4 * tr) * Math.pow(1 - tr, 0.5);
+    bdata[o + 8] = pa[0] + (M[0] - pab[0]) * (1 - tr); bdata[o + 9] = pa[1] + (M[1] - pab[1]) * (1 - tr);
+    bdata[o + 10] = pb[0] + (M[0] - pbb[0]) * (1 - tr); bdata[o + 11] = pb[1] + (M[1] - pbb[1]) * (1 - tr);
+    // Satellite: left at the break, then swallowed back by the heavier of the two drops. It chases
+    // that drop wherever it is now; if the drop has already landed, it lands on the same spot.
+    const parent = A.mass >= Bd.mass ? sa : sb;
+    const ts = win(ub, SNAP + 0.08, 0.92), es = smoother(ts);
+    bdata[o + 7] = rs0 * Math.sqrt(Math.max(0, 1 - ss(0.8, 1, ts)));
+    bdata[o + 12] = M[0] + (parent.pos[0] - M[0]) * es; bdata[o + 13] = M[1] + (parent.pos[1] - M[1]) * es;
+    bdata[o + 14] = 1;
+  });
+  // Every cell side: light, the same drop, or another drop's cell it is tearing away from. The tear
+  // follows whichever of the two drops has melted further.
+  const n = model.n, attach = new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const id = model.cellDrop[y * n + x];
+    if (id < 0) continue;
+    [[-1, 0], [0, -1], [1, 0], [0, 1]].forEach(([dx, dy], side) => {
+      const nx = x + dx, ny = y + dy;
+      const j = nx < 0 || ny < 0 || nx >= n || ny >= n ? -1 : model.cellDrop[ny * n + nx];
+      let v = 0;
+      if (j === id) v = 255;
+      else if (j >= 0) v = Math.round((0.02 + 0.48 * (1 - ss(0, TEAR, Math.max(states[id].m, states[j].m)))) * 255);
+      attach[(y * n + x) * 4 + side] = v;
+    });
+  }
+  // The target's half-width along its length: built from the mass that has landed, normalised
+  // by what the same bumps will sum to once everything has landed, so the final width is exact.
+  const profile = new Float32Array(PROFILE_N).fill(-2);
+  if (mode === 3) {
+    const total = model.poly.total, Wf = CHECK_W_MOD * model.n, eps = 0.03, lamc = 3.6 * Wf * 0.5;
+    for (let k = 0; k < PROFILE_N; k++) {
+      const s = k / (PROFILE_N - 1) * total;
+      let pe = 0, pf = 0, rip = 0;
+      for (let i = 0; i < N; i++) {
+        const d = drops[i], st = states[i], tg = d.poly, h = Math.max(st.h, 0.2);
+        const Bv = Phi((s - tg.a) / h) - Phi((s - tg.b) / h);
+        pf += Bv; pe += st.l * Bv;
+        if (st.u > 0.85 && st.u < 1) {
+          // A landing sends a capillary wave along the bead that dies out as it settles.
+          const tt = win(st.u, 0.85, 1), ds = Math.abs(s - tg.s);
+          rip += 0.07 * Math.exp(-ds / (1.5 * lamc)) * Math.cos(2 * PI * ds / lamc - 2 * PI * 1.5 * tt) * Math.exp(-2 * tt) * (1 - tt) * Math.sin(PI * Math.min(1, tt * 3));
+        }
+      }
+      const ratio = pf > 1e-6 ? pe / pf : 0;
+      // Below the threshold the stroke sinks out of reach instead of switching off.
+      profile[k] = ratio >= eps ? Wf * Math.sqrt((ratio - eps) / (1 - eps)) * (1 + rip) : -2 * (1 - ratio / eps);
+    }
+  }
+  return { N, B, sdata, bdata, profile, attach };
+}
+
+// Port of QROutlineRadii.derived(module:inner:).
+function derivedRadii(module, inner) {
+  const m = Math.min(Math.max(module, 0), 0.5), outer = Math.max(0.25, m * 3);
+  return { module: m, inner: Math.min(Math.max(inner, 0), 0.5), finderOuter: Math.min(outer, 3.5), finderInner: Math.min(outer * 0.7, 2.5), finderCenter: Math.min(outer * 0.5, 1.5) };
+}
+
+// Port of QROutline.trace + finders, drawn the way Path(qrCommands:) draws them
+// (addArc(tangent1End:tangent2End:radius:) is canvas arcTo). Used as the reference for the diff.
+function outlinePath(n, bits, radii) {
+  const path = new Path2D();
+  const dark = (x, y) => isDark(n, bits, x, y);
+  const stride = n + 1, drawn = new Uint8Array((2 * n + 1) * stride);
+  const corner = (cx, cy, ex, ey, convex) => {
+    const r = convex ? radii.module : radii.inner;
+    if (r > 0) path.arcTo(cx, cy, ex, ey, r); else path.lineTo(cx, cy);
+    path.lineTo(ex, ey);
+  };
+  for (let x = 0; x < n; x++) for (let row = 0; row < n; row++) {
+    const y0 = 2 * row;
+    if (drawn[y0 * stride + x] || dark(x, row - 1) || !dark(x, row)) continue;
+    path.moveTo(x + 0.5, row);
+    let cx = x, cy = y0, dir = 0;
+    while (!drawn[cy * stride + cx]) {
+      drawn[cy * stride + cx] = 1;
+      const r = Math.trunc(cy / 2), fx = cx;
+      if (cy % 2 === 0 && dir === 0) {
+        if (dark(cx + 1, r)) {
+          if (dark(cx + 1, r - 1)) { corner(fx + 1, r, fx + 1, r - 0.5, false); cx += 1; cy -= 1; dir = 0; }
+          else { path.lineTo(fx + 1.5, r); cx += 1; }
+        } else { corner(fx + 1, r, fx + 1, r + 0.5, true); cx += 1; cy += 1; dir = 1; }
+      } else if (cy % 2 === 0) {
+        if (dark(cx - 1, r - 1)) {
+          if (dark(cx - 1, r)) { corner(fx, r, fx, r + 0.5, false); cy += 1; dir = 1; }
+          else { path.lineTo(fx - 0.5, r); cx -= 1; }
+        } else { corner(fx, r, fx, r - 0.5, true); cy -= 1; dir = 0; }
+      } else if (dir === 0) {
+        const rw = (cy - 1) / 2;
+        if (dark(cx, rw - 1)) {
+          if (dark(cx - 1, rw - 1)) { corner(fx, rw, fx - 0.5, rw, false); cx -= 1; cy -= 1; dir = 1; }
+          else { path.lineTo(fx, rw - 0.5); cy -= 2; }
+        } else { corner(fx, rw, fx + 0.5, rw, true); cy -= 1; dir = 0; }
+      } else {
+        const rw = (cy - 1) / 2;
+        if (dark(cx - 1, rw + 1)) {
+          if (dark(cx, rw + 1)) { corner(fx, rw + 1, fx + 0.5, rw + 1, false); cy += 1; dir = 0; }
+          else { path.lineTo(fx, rw + 1.5); cy += 2; }
+        } else { corner(fx, rw + 1, fx - 0.5, rw + 1, true); cx -= 1; cy += 1; dir = 1; }
+      }
+    }
+    path.closePath();
+  }
+  const rect = (x, y, w, h, r, cw) => {
+    r = Math.min(Math.max(r, 0), Math.min(w, h) / 2);
+    const x1 = x + w, y1 = y + h;
+    if (cw) {
+      path.moveTo(x + r, y); path.arcTo(x1, y, x1, y + r, r); path.arcTo(x1, y1, x1 - r, y1, r);
+      path.arcTo(x, y1, x, y1 - r, r); path.arcTo(x, y, x + r, y, r);
+    } else {
+      path.moveTo(x, y + r); path.arcTo(x, y1, x + r, y1, r); path.arcTo(x1, y1, x1, y1 - r, r);
+      path.arcTo(x1, y, x1 - r, y, r); path.arcTo(x, y, x, y + r, r);
+    }
+    path.closePath();
+  };
+  for (const [ox, oy] of [[0, 0], [n - 7, 0], [0, n - 7]]) {
+    rect(ox, oy, 7, 7, radii.finderOuter, true);
+    rect(ox + 1, oy + 1, 5, 5, radii.finderInner, false);
+    rect(ox + 2, oy + 2, 3, 3, radii.finderCenter, true);
+  }
+  return path;
+}
+
+class Renderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    const gl = canvas.getContext('webgl2', { antialias: false, premultipliedAlpha: false, preserveDrawingBuffer: true });
+    if (!gl) throw new Error('WebGL2 unavailable');
+    this.gl = gl;
+    this.field = program(gl, FIELD_FS);
+    const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    this.info = this.makeTex(); this.state = this.makeTex(); this.bondState = this.makeTex(); this.profile = this.makeTex(); this.attach = this.makeTex();
+    this.size = 0; this.simKey = '';
+  }
+  makeTex() {
+    const gl = this.gl, t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+  resize(px) {
+    if (this.size === px) return;
+    this.size = px; this.canvas.width = px; this.canvas.height = px;
+  }
+  setModel(model) {
+    if (this.model === model) return;
+    const gl = this.gl;
+    this.model = model; this.simKey = '';
+    gl.bindTexture(gl.TEXTURE_2D, this.info);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8UI, model.n + 1, model.n + 1, 0, gl.RGBA_INTEGER, gl.UNSIGNED_BYTE, model.info);
+  }
+  render(st) {
+    const gl = this.gl, px = this.size, model = this.model;
+    gl.viewport(0, 0, px, px);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (st.mode === -1) { gl.clearColor(1, 1, 1, 1); gl.clear(gl.COLOR_BUFFER_BIT); return; }
+    const f = this.field; gl.useProgram(f.p);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.info); gl.uniform1i(f.u.uInfo, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.state); gl.uniform1i(f.u.uState, 1);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.bondState); gl.uniform1i(f.u.uBondState, 2);
+    gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, this.profile); gl.uniform1i(f.u.uProfile, 3);
+    gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, this.attach); gl.uniform1i(f.u.uAttach, 4);
+    let N = 0, B = 0;
+    if (st.mode !== 0) {
+      // The simulation depends only on progress and the liquid settings; a held frame costs nothing.
+      const key = [st.mode, st.p, st.stagger, st.tension].join('|');
+      if (key !== this.simKey) {
+        this.simKey = key;
+        const sim = simulate(model, st.p, st.mode, st);
+        this.simN = sim.N; this.simB = sim.B;
+        gl.activeTexture(gl.TEXTURE1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 5, sim.N, 0, gl.RGBA, gl.FLOAT, sim.sdata);
+        gl.activeTexture(gl.TEXTURE2); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 4, Math.max(1, sim.B), 0, gl.RGBA, gl.FLOAT, sim.bdata);
+        gl.activeTexture(gl.TEXTURE3); gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, PROFILE_N, 1, 0, gl.RED, gl.FLOAT, sim.profile);
+        gl.activeTexture(gl.TEXTURE4); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, model.n, model.n, 0, gl.RGBA, gl.UNSIGNED_BYTE, sim.attach);
+      }
+      N = this.simN; B = this.simB;
+    }
+    gl.uniform1i(f.u.uNDrops, N); gl.uniform1i(f.u.uNBonds, B);
+    gl.uniform2fv(f.u.uPoly, new Float32Array([...model.poly.pts.flat(), 0, 0]));
+    gl.uniform1i(f.u.uPolyN, model.poly.pts.length); gl.uniform1f(f.u.uPolyLen, model.poly.total);
+    gl.uniform1i(f.u.uN, model.n); gl.uniform1f(f.u.uQuiet, 2);
+    gl.uniform2f(f.u.uRes, px, px); gl.uniform3f(f.u.uRect, 0, 0, px);
+    gl.uniform1i(f.u.uMode, st.mode);
+    const r = st.radii;
+    gl.uniform4f(f.u.uRadii, r.module, r.inner, r.finderOuter, r.finderInner); gl.uniform1f(f.u.uFinderCenter, r.finderCenter);
+    gl.uniform1f(f.u.uTension, st.tension);
+    gl.uniform3f(f.u.uFg, 0.067, 0.075, 0.086); gl.uniform3f(f.u.uBg, 1, 1, 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+}
+
+// ---------- App state ----------
+const $ = (id) => document.getElementById(id);
+const S = {
+  payload: 'static', frame: 0, scene: 'code', effect: null, p: 1, playing: false, start: 0,
+  tension: 0.26, stagger: 0.55, grid: 7, radiusModule: 0.5, radiusInner: 0.5, slow: false, diff: false,
+};
+const EFFECTS = {
+  appear: () => ({ name: 'appear', mode: 4, from: 1, to: 0, dur: 1.2, end: 'code' }),
+  disappear: () => ({ name: 'disappear', mode: 4, from: 0, to: 1, dur: 1.2, end: 'empty' }),
+  morph: () => ({ name: 'morph to ✓', mode: 3, from: 0, to: 1, dur: 1.6, end: 'check' }),
+  back: () => ({ name: '✓ back to code', mode: 3, from: 1, to: 0, dur: 1.6, end: 'code' }),
+};
+let lastEffectKey = 'appear';
+
+function radii() { return derivedRadii(S.radiusModule, S.radiusInner); }
+function params(extra) { return Object.assign({ stagger: S.stagger, tension: S.tension, radii: radii() }, extra); }
+function sceneState() {
+  if (S.effect) return params({ mode: S.effect.mode, p: S.p });
+  if (S.scene === 'empty') return params({ mode: -1, p: 0 });
+  if (S.scene === 'check') return params({ mode: 3, p: 1 });
+  return params({ mode: 0, p: 1 });
+}
+
+let main, thumb;
+const models = new Map();
+function currentMatrix() { const d = DATA[S.payload]; return { n: d.n, bits: d.frames[S.frame % d.frames.length] }; }
+function modelFor(m, G) {
+  const key = `${S.payload}|${S.frame % DATA[S.payload].frames.length}|${G}`;
+  if (!models.has(key)) { if (models.size > 24) models.clear(); models.set(key, buildModel(m.n, m.bits, G)); }
+  return models.get(key);
+}
+function loadMatrix() { main.setModel(modelFor(currentMatrix(), S.grid)); diffKey = ''; }
+
+function sizeMain() {
+  const rect = $('gl').getBoundingClientRect();
+  const px = Math.max(64, Math.round(rect.width * Math.min(2, window.devicePixelRatio || 1)));
+  main.resize(px);
+  const diff = $('diff'); diff.width = px; diff.height = px; diffKey = '';
+}
+
+let diffKey = '';
+function drawDiff() {
+  const c = $('diff');
+  const show = S.diff && !S.effect && S.scene === 'code';
+  c.hidden = !show;
+  if (!show) return;
+  const m = currentMatrix(), r = radii();
+  const key = [S.payload, S.frame, r.module, r.inner, c.width].join('|');
+  if (key === diffKey) return;
+  diffKey = key;
+  const ctx = c.getContext('2d');
+  const scale = c.width / (m.n + 4);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, c.width, c.height);
+  ctx.setTransform(scale, 0, 0, scale, 2 * scale, 2 * scale);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill(outlinePath(m.n, m.bits, r), 'nonzero');
+}
+
+function settingsText() {
+  const r = radii();
+  return [`tension ${S.tension.toFixed(2)}`, `stagger ${S.stagger.toFixed(2)}`, `drops ${S.grid}x${S.grid}`, `module radius ${r.module.toFixed(2)}`, `inner radius ${r.inner.toFixed(2)}`].join(' · ');
+}
+const STORE_KEY = 'liquid-qr-lab-settings-v4';
+const STORED = ['tension', 'stagger', 'drops', 'radiusModule', 'radiusInner'];
+function saveSettings() {
+  $('settingsText').textContent = settingsText();
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(Object.fromEntries(STORED.map((id) => [id, $(id).value])))); } catch (e) { /* storage unavailable */ }
+}
+function restoreSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    if (saved) for (const id of STORED) if (saved[id] !== undefined) $(id).value = saved[id];
+  } catch (e) { /* storage unavailable */ }
+}
+
+function updateReadout() {
+  const d = DATA[S.payload];
+  $('r-effect').textContent = S.effect ? S.effect.name : (S.scene === 'code' ? 'rest' : S.scene === 'check' ? 'rest · ✓' : 'hidden');
+  $('r-p').textContent = (S.effect ? S.p : (S.scene === 'empty' ? 0 : 1)).toFixed(3);
+  $('r-sym').textContent = `v${(d.n - 17) / 4} · ${d.n}×${d.n}`;
+  $('r-frame').textContent = `${(S.frame % d.frames.length) + 1}/${d.frames.length}${d.frames.length > 1 ? (S.effect || S.scene !== 'code' ? ' · frozen' : ' · hard cut') : ''}`;
+}
+
+let lastCut = 0;
+const holdFrame = location.hash.includes('hold');
+function frame(now) {
+  if (S.playing && S.effect) {
+    const dur = S.effect.dur * (S.slow ? 4 : 1);
+    const t = Math.min(1, (now - S.start) / 1000 / dur);
+    S.p = S.effect.from + (S.effect.to - S.effect.from) * t;
+    $('progress').value = String(S.p);
+    if (t >= 1) { S.playing = false; S.scene = S.effect.end; S.effect = null; lastCut = now; }
+  }
+  // Animated codes cycle frames only at rest, with a hard cut and never a transition.
+  const d = DATA[S.payload];
+  if (!S.effect && S.scene === 'code' && d.frames.length > 1 && now - lastCut > 125 && !holdFrame) {
+    S.frame = (S.frame + 1) % d.frames.length; lastCut = now; loadMatrix();
+  }
+  main.render(sceneState());
+  drawDiff();
+  updateReadout();
+  if (!S.playing) sheetStep();
+  requestAnimationFrame(frame);
+}
+
+function run(key) {
+  lastEffectKey = key;
+  S.effect = EFFECTS[key]();
+  S.p = S.effect.from; S.playing = true; S.start = performance.now();
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) S.start -= 1e6;
+  scheduleSheet();
+}
+
+// ---------- Contact sheet: drawn two frames at a time once nothing is animating ----------
+const SHEET_P = [0.05, 0.13, 0.21, 0.3, 0.38, 0.46, 0.54, 0.62, 0.71, 0.8, 0.9, 1.0];
+let sheetJob = null;
+function scheduleSheet() { sheetJob = { eff: EFFECTS[lastEffectKey](), i: 0, model: modelFor(currentMatrix(), S.grid) }; }
+function sheetStep() {
+  if (!sheetJob) return;
+  const job = sheetJob, cell = 112, gap = 8, top = 22;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const c = $('sheet'), ctx = c.getContext('2d');
+  if (job.i === 0) {
+    const W = SHEET_P.length * (cell + gap), H = top + cell;
+    c.width = W * dpr; c.height = H * dpr; c.style.width = W + 'px'; c.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
+    ctx.font = '500 11px "JetBrains Mono", ui-monospace, monospace'; ctx.fillStyle = muted; ctx.textBaseline = 'middle';
+    SHEET_P.forEach((sp, i) => ctx.fillText(`${Math.round(sp * 100)}%`, i * (cell + gap) + cell / 2 - 12, top / 2));
+    $('sheet-caption').textContent = `${job.eff.name}, sampled at twelve points of its progress.`;
+    thumb.resize(Math.round(cell * dpr)); thumb.setModel(job.model);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const line = getComputedStyle(document.documentElement).getPropertyValue('--line').trim();
+  for (let k = 0; k < 2 && job.i < SHEET_P.length; k++, job.i++) {
+    const sp = SHEET_P[job.i], p = job.eff.from + (job.eff.to - job.eff.from) * sp;
+    thumb.render(params({ mode: job.eff.mode, p }));
+    const x = job.i * (cell + gap);
+    ctx.drawImage(thumb.canvas, x, top, cell, cell);
+    ctx.strokeStyle = line; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, top + 0.5, cell - 1, cell - 1);
+  }
+  if (job.i >= SHEET_P.length) sheetJob = null;
+}
+
+// ---------- Wiring ----------
+function segment(id, key, cast, after) {
+  const root = $(id);
+  root.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    for (const x of root.querySelectorAll('button')) x.setAttribute('aria-pressed', String(x === b));
+    S[key] = cast(b.dataset.v); after && after();
+  });
+}
+function slider(id, key, fmt) {
+  const el = $(id), out = $('o-' + id);
+  const sync = () => { S[key] = parseFloat(el.value); out.textContent = fmt(S[key]); };
+  el.addEventListener('input', () => { sync(); if (key === 'grid') loadMatrix(); saveSettings(); scheduleSheet(); });
+  sync();
+}
+
+function boot() {
+  try {
+    main = new Renderer($('gl'));
+    thumb = new Renderer(document.createElement('canvas'));
+  } catch (err) {
+    document.querySelector('.specimen').insertAdjacentHTML('beforeend', `<p id="nogl">This lab needs WebGL2: ${err.message}</p>`);
+    return;
+  }
+  restoreSettings();
+  segment('payload', 'payload', String, () => { S.frame = 0; loadMatrix(); scheduleSheet(); });
+  slider('tension', 'tension', (v) => v.toFixed(2) + ' mod');
+  slider('stagger', 'stagger', (v) => v.toFixed(2));
+  slider('drops', 'grid', (v) => `${v}×${v}`);
+  slider('radiusModule', 'radiusModule', (v) => v.toFixed(2) + ' mod');
+  slider('radiusInner', 'radiusInner', (v) => v.toFixed(2) + ' mod');
+  saveSettings();
+  $('slow').addEventListener('change', (e) => { S.slow = e.target.checked; });
+  $('diffToggle').addEventListener('change', (e) => { S.diff = e.target.checked; diffKey = ''; });
+  $('copySettings').addEventListener('click', () => {
+    const text = settingsText(), button = $('copySettings');
+    const done = (label) => { button.textContent = label; setTimeout(() => { button.textContent = 'Copy settings'; }, 1600); };
+    const fallback = () => { const range = document.createRange(); range.selectNodeContents($('settingsText')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range); done('Selected, press ⌘C'); };
+    try { navigator.clipboard.writeText(text).then(() => done('Copied'), fallback); } catch (e) { fallback(); }
+  });
+  $('a-appear').addEventListener('click', () => run('appear'));
+  $('a-disappear').addEventListener('click', () => run('disappear'));
+  $('a-morph').addEventListener('click', () => run('morph'));
+  $('a-back').addEventListener('click', () => run('back'));
+  $('play').addEventListener('click', () => run(lastEffectKey));
+  $('progress').addEventListener('input', (e) => {
+    if (!S.effect) { S.effect = EFFECTS[lastEffectKey](); }
+    S.playing = false; S.p = parseFloat(e.target.value);
+  });
+  new ResizeObserver(sizeMain).observe($('gl'));
+  sizeMain(); loadMatrix();
+  // Hash shortcuts for screenshots: #<effect>-<payload>-<percent>-diff-rest-hold-r<module>-i<inner>
+  const tokens = location.hash.replace('#', '').split('-');
+  if (EFFECTS[tokens[0]]) lastEffectKey = tokens[0];
+  if (DATA[tokens[1]] && tokens[1] !== 'radii') {
+    S.payload = tokens[1]; loadMatrix();
+    for (const x of $('payload').querySelectorAll('button')) x.setAttribute('aria-pressed', String(x.dataset.v === tokens[1]));
+  }
+  for (const token of tokens.slice(1)) {
+    if (/^r[0-9]+$/.test(token)) { S.radiusModule = Number(token.slice(1)) / 100; $('radiusModule').value = S.radiusModule; }
+    if (/^i[0-9]+$/.test(token)) { S.radiusInner = Number(token.slice(1)) / 100; $('radiusInner').value = S.radiusInner; }
+  }
+  run(lastEffectKey);
+  for (const token of tokens.slice(1)) {
+    if (/^[0-9]+$/.test(token)) { S.playing = false; S.p = S.effect.from + (S.effect.to - S.effect.from) * Number(token) / 100; }
+    if (token === 'diff') { S.diff = true; $('diffToggle').checked = true; }
+    if (token === 'rest') { S.effect = null; S.playing = false; S.scene = 'code'; S.p = 1; }
+  }
+  requestAnimationFrame(frame);
+  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', scheduleSheet);
+}
+boot();
+</script>
