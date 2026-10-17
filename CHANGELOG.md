@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Liquid transitions, now the default reveal (`QRReveal.liquid`): the code behaves like mercury.
+  It melts into drops that pull apart toward invisible magnets and sink, gathers back the same
+  way, and with `.qrMorph(_:)` flows into a shape such as `.checkmark` and back. Drops are joined
+  by threads that stretch, snap and recoil; a target is built from landed mass.
+- `QRLiquidStyle` exposes the tuned parameters: `tension`, `stagger`, `dropsPerSide`.
+- Drawn by a Metal shader compiled at runtime (no Metal toolchain needed by consumers), only
+  while a transition runs; at rest and at both ends of every transition the code is the vector
+  outline. Falls back to the growing reveal where Metal is unavailable.
+- The previous effect remains as `QRReveal.grow`. `QRCodeShape` defaults to it.
+- `Prototypes/LiquidLab`: the browser prototype the liquid was designed in, with tools to compare
+  the Swift port against it frame by frame.
+
 ## 0.1.0 — 2026-10-15
 
 Initial release.

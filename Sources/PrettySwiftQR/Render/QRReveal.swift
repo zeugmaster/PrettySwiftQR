@@ -2,16 +2,27 @@
 //  QRReveal.swift
 //  PrettySwiftQR
 //
-//  The appear/disappear effect: every module grows from its centre into its
-//  final rounded form, staggered across the symbol so the code looks like it
-//  condenses out of liquid. Driven by a single scalar (`reveal`, 0…1) that a
-//  SwiftUI transition animates; frames of an animated code never touch it.
+//  The appear/disappear effect. Two kinds: the liquid one (the default), where
+//  the code behaves like mercury (see `QRLiquidStyle`), and the growing one,
+//  where every module grows from its centre into its final rounded form,
+//  staggered across the symbol. Both are driven by a single scalar (`reveal`,
+//  0…1) that SwiftUI animates; frames of an animated code never touch it.
 //
 
 import SwiftUI
 import PrettyQRCore
 
-/// How modules are staggered during a reveal.
+/// How a code appears, disappears and is replaced.
+///
+/// ```swift
+/// .qrReveal(.liquid)                                   // the default: mercury
+/// .qrReveal(.liquid(QRLiquidStyle(tension: 0.3)))      // tuned
+/// .qrReveal(.grow)                                     // modules grow from their centres
+/// .qrReveal(.none)                                     // plain cross-fade
+/// ```
+///
+/// The liquid reveal needs Metal; where it is unavailable the growing reveal
+/// runs with the same duration instead.
 public struct QRReveal: Hashable, Sendable {
     public enum Order: Hashable, Sendable {
         /// Every module at once.
@@ -35,11 +46,15 @@ public struct QRReveal: Hashable, Sendable {
     public var duration: Double
     /// When false, `QRCodeView` applies no transition of its own.
     public var isEnabled: Bool
+    /// The liquid effect's parameters, or nil for the growing reveal (which the
+    /// order, stagger and overshoot above describe; they are also its fallback).
+    public var liquid: QRLiquidStyle?
     /// Runs the stagger the other way round (last modules first). Used for a
     /// symbol that is being replaced, so the incoming one displaces it as a
     /// wave instead of both overlapping where the incoming one starts.
     var reversesStagger = false
 
+    /// A growing reveal: every module grows from its centre.
     public init(order: Order = .fromCenter, stagger: Double = 0.55, overshoot: Double = 0.12, duration: Double = 0.7, isEnabled: Bool = true) {
         self.order = order
         self.stagger = min(max(stagger, 0), 0.95)
@@ -48,7 +63,20 @@ public struct QRReveal: Hashable, Sendable {
         self.isEnabled = isEnabled
     }
 
-    public static let liquid = QRReveal()
+    /// The code appears and disappears as liquid (see `QRLiquidStyle`), with the
+    /// settings it was tuned with.
+    public static let liquid = QRReveal.liquid()
+
+    /// The code appears and disappears as liquid. `duration` is the length of one
+    /// appearance or disappearance; morphs take their own (see `qrMorph(_:duration:)`).
+    public static func liquid(_ style: QRLiquidStyle = .default, duration: Double = 1.2) -> QRReveal {
+        var reveal = QRReveal(order: .fromCenter, duration: duration)
+        reveal.liquid = style
+        return reveal
+    }
+
+    /// Every module grows from its centre into its rounded form.
+    public static let grow = QRReveal()
     public static let none = QRReveal(isEnabled: false)
 
     /// The same reveal with the stagger reversed, for the outgoing symbol of a swap.
@@ -59,7 +87,8 @@ public struct QRReveal: Hashable, Sendable {
     }
 
     public var animation: Animation {
-        .easeInOut(duration: duration)
+        // The liquid eases every drop on its own; a shared curve on top would read as phases.
+        liquid != nil ? .linear(duration: duration) : .easeInOut(duration: duration)
     }
 
     // MARK: Timing
