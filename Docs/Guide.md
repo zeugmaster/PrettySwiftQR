@@ -52,7 +52,8 @@ QRCodeView(.text(invoice))
 
 Drops land along the target's stroke in proportion to their mass, so the shape is complete
 only when the last drop has arrived. An animated code holds its frame while morphed and plays
-on once it is back.
+on once it is back. The morph is liquid with any reveal: `.qrReveal(.none)` shows the code at
+once and still flows into the shape.
 
 ### Your own shapes
 

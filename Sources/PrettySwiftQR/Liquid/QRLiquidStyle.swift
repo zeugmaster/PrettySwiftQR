@@ -82,8 +82,8 @@ extension EnvironmentValues {
 
 public extension View {
     /// Flows every `QRCodeView` below into `target`, or back into the code when
-    /// `target` is nil. The flow is part of the liquid transitions (see
-    /// `QRReveal.liquid`); with other reveals, or where Metal is unavailable, the
+    /// `target` is nil. The flow is liquid with any reveal, so `.qrReveal(.none)`
+    /// shows the code at once and still morphs; where Metal is unavailable the
     /// code stays as it is. An animated code holds its current frame while it is
     /// morphed and starts again from its first frame once it is back.
     ///

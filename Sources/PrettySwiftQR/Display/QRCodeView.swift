@@ -91,8 +91,8 @@ public struct QRCodeView<Placeholder: View>: View {
         }
         .task(id: taskKey) {
             let key = taskKey
-            if revealStyle.liquid != nil {
-                // Compile the liquid shader before the first symbol appears.
+            if revealStyle.liquid != nil || key.morphed {
+                // Compile the liquid shader before the first symbol appears, or as a morph starts.
                 await QRLiquidGPU.prepare()
                 guard !Task.isCancelled else { return }
             }
@@ -149,11 +149,6 @@ public struct QRCodeView<Placeholder: View>: View {
     private func morph(to target: QRMorphTarget?, animated: Bool) {
         morphGeneration += 1
         let generation = morphGeneration
-        guard revealStyle.liquid != nil, revealStyle.isEnabled else {
-            morphTarget = nil
-            morph = 0
-            return
-        }
         guard animated else {
             // Already morphed when the view appears: start as the shape.
             morphTarget = target
@@ -269,7 +264,9 @@ private struct RevealedSymbol: View {
 
     var body: some View {
         let shown = min(transitionReveal, revealStyle.isEnabled ? reveal : 1)
-        if revealStyle.isEnabled, let liquid = revealStyle.liquid, QRLiquidGPU.ready != nil {
+        // A morph is liquid with any reveal; the other reveals use the default liquid for it.
+        let liquid = (revealStyle.isEnabled ? revealStyle.liquid : nil) ?? (morphTarget == nil ? nil : .default)
+        if let liquid, QRLiquidGPU.ready != nil {
             QRLiquidSymbol(matrix: matrix, style: style, liquid: liquid, target: morphTarget,
                            reveal: shown, morph: morphTarget == nil ? 0 : morph)
         } else {
