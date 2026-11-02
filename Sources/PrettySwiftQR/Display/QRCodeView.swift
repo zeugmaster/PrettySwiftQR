@@ -91,8 +91,8 @@ public struct QRCodeView<Placeholder: View>: View {
         }
         .task(id: taskKey) {
             let key = taskKey
-            if revealStyle.liquid != nil || key.morphed {
-                // Compile the liquid shader before the first symbol appears, or as a morph starts.
+            if revealStyle.liquid != nil {
+                // Compile the liquid shader before the first symbol appears.
                 await QRLiquidGPU.prepare()
                 guard !Task.isCancelled else { return }
             }
@@ -149,20 +149,19 @@ public struct QRCodeView<Placeholder: View>: View {
     private func morph(to target: QRMorphTarget?, animated: Bool) {
         morphGeneration += 1
         let generation = morphGeneration
-        guard animated else {
-            // Already morphed when the view appears: start as the shape.
-            morphTarget = target
-            morph = target == nil ? 0 : 1
-            return
-        }
         let animation = Animation.linear(duration: morphRequest.duration)
         guard let target else {
+            guard animated else {
+                morphTarget = nil
+                morph = 0
+                return
+            }
             withAnimation(animation) { morph = 0 } completion: {
                 if generation == morphGeneration { morphTarget = nil }
             }
             return
         }
-        if let current = morphTarget, current != target, morph > 0 {
+        if animated, let current = morphTarget, current != target, morph > 0 {
             // Another shape: flow back into the code first, then into the new shape.
             withAnimation(animation) { morph = 0 } completion: {
                 guard generation == morphGeneration else { return }
@@ -171,8 +170,21 @@ public struct QRCodeView<Placeholder: View>: View {
             }
             return
         }
-        morphTarget = target
-        withAnimation(animation) { morph = 1 }
+        // The liquid symbol draws the flow, and with any reveal but the liquid one it is only in
+        // place once the target is set. So compile the shader first, set the target, and start the
+        // flow a turn later, once that symbol is on screen at rest; otherwise the flow would jump.
+        Task { @MainActor in
+            guard await QRLiquidGPU.prepare() != nil, generation == morphGeneration else { return }
+            morphTarget = target
+            guard animated else {
+                morph = 1 // already morphed when the view appears: start as the shape
+                return
+            }
+            DispatchQueue.main.async {
+                guard generation == morphGeneration else { return }
+                withAnimation(animation) { morph = 1 }
+            }
+        }
     }
 
     // MARK: Swap choreography
